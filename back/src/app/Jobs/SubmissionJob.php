@@ -76,5 +76,7 @@ class SubmissionJob implements ShouldQueue
 
             throw $exception;
         }
+
+        CheckSubmissionStatusJob::dispatch($submissao->id)->delay(now()->addSeconds(1));
     }
 }
