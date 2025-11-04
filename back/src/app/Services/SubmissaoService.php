@@ -2,8 +2,7 @@
 
 namespace App\Services;
 
-use App\Facades\Judge0;
-use App\Models\Correcao;
+use App\Jobs\SubmissionJob;
 use App\Models\Submissao;
 use Exception;
 use Illuminate\Http\Request;
@@ -27,37 +26,16 @@ class SubmissaoService
     }
 
     /**
-     * @throws Throwable
+     * Persiste a submissão e agenda o processamento assíncrono.
      */
     public function salvar(): bool
     {
-        DB::beginTransaction();
-
-        try {
-            if (!$this->_submissao->save()) {
-                throw new Exception("Erro ao salvar submissão.");
-            }
-            // TODO: Solução temporária. É preciso tratar erros de submissão no futuro.
-            $respostas = Judge0::criarSubmissao($this->_submissao);
-
-            foreach ($respostas as $resposta) {
-                $casoTeste = new Correcao([
-                    'token' => $resposta['token'],
-                    'caso_teste_id' => $resposta['caso_teste_id'],
-                    'status_correcao_id' => 1,
-                    'submissao_id' => $this->_submissao->id,
-                ]);
-
-                if (!$casoTeste->save()) {
-                    throw new Exception("Erro ao salvar caso de teste.");
-                }
-            }
-        } catch (Exception $e) {
-            DB::rollBack();
+        if (!$this->_submissao->save()) {
             return false;
         }
 
-        DB::commit();
+        SubmissionJob::dispatch($this->_submissao->id);
+
         return true;
     }
 
