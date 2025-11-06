@@ -28,20 +28,29 @@ import type { Submission } from "../types";
 import { fakeSubmissions } from "../mocks";
 import axios from "axios";
 
+const API_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
+
 /**
  * Simula uma chamada de API para buscar todas as submissões.
  * @returns Promise<Submission[]>
  */
 export async function getAllSubmissions(): Promise<Submission[]> {
   try {
-    const response = await axios.get("http://localhost:8000/api/submissoes");
+    const response = await axios.get(`${API_URL}/api/submissoes`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      withCredentials: true,
+    });
 
     return response.data.map((submissao: any) => ({
       id: submissao.id,
       activityId: submissao.atividade_id,
       dateSubmitted: submissao.data_submissao,
-      language: "c",
-      status: "partial",
+      language: submissao.linguagem || "c",
+      status: submissao.status || "pending",
     }));
   } catch (error) {
     console.log("erro", error);
@@ -55,7 +64,15 @@ export async function getResultBySubmissionId(
 ): Promise<TestCaseResult[]> {
   try {
     const response = await axios.get(
-      `http://localhost:8000/api/correcao/busca-por-submissao/${submissionId}`
+      `${API_URL}/api/correcao/busca-por-submissao/${submissionId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        withCredentials: true,
+      }
     );
     return response.data.map((item: any) => ({
       id: item.id,
@@ -77,9 +94,16 @@ export async function postSubmission({
   activityId: number;
 }): Promise<Submission | undefined> {
   try {
-    const response = await axios.post("http://localhost:8000/api/submissoes", {
+    const response = await axios.post(`${API_URL}/api/submissoes`, {
       codigo: code,
       atividade_id: activityId,
+    }, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      withCredentials: true,
     });
     return response.data;
   } catch (error) {
@@ -97,6 +121,48 @@ export async function postSubmission({
 export async function getSubmissionsByActivityId(
   activityId: string
 ): Promise<Submission[]> {
-  await new Promise((resolve) => setTimeout(resolve, 200));
-  return fakeSubmissions.filter((s) => s.activityId === activityId);
+  try {
+    console.log("[Debug] Getting submissions for activity", activityId, "token:", localStorage.getItem("auth_token"));
+    const response = await axios.get(
+      `${API_URL}/api/submissoes/atividades/${activityId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        withCredentials: true,
+      }
+    );
+
+    // debug: log the full response for inspection
+    console.log("[Debug] Full response:", {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+      data: response.data
+    });
+
+    // debug: log raw response shape for inspection
+    console.log("[Debug] Raw response data:", JSON.stringify(response.data, null, 2));
+
+    // ensure we're getting the submissions array from the response
+    const submissions = response.data?.submissoes || [];
+    console.log("[Debug] Extracted submissions:", submissions);
+
+    const mapped = submissions.map((submissao: any) => ({
+      id: submissao.id,
+      activityId: submissao.atividade_id,
+      dateSubmitted: submissao.data_submissao,
+      language: submissao.linguagem || "c",
+      status: submissao.status || "pending",
+    }));
+
+    console.log("[Debug] Mapped submissions:", mapped);
+    return mapped;
+  } catch (error) {
+    console.log("erro ao buscar submissões por atividade", error);
+  }
+
+  return [];
 }

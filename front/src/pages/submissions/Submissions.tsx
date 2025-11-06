@@ -375,6 +375,14 @@ export default function Submissions() {
             <TableBody>
               {sortedSubmissions.map((submission) => {
                 const dateInfo = formatDate(submission.dateSubmitted);
+                // mostra apenas a data (sem horário) na tabela principal
+                const formattedDateOnly = new Date(
+                  submission.dateSubmitted
+                ).toLocaleDateString("pt-BR", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                });
                 const activity = mapActivities.get(submission.activityId);
                 const problem = activity
                   ? mapProblems.get(activity.problemId)
@@ -402,7 +410,7 @@ export default function Submissions() {
                     <TableCell>
                       <div className="flex flex-col">
                         <span className="text-gray-900 font-medium">
-                          {dateInfo.formatted}
+                          {formattedDateOnly}
                         </span>
                         <span className="text-xs text-gray-500">
                           {dateInfo.relative}

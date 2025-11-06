@@ -31,8 +31,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/user/change-password', [AuthController::class, 'changePassword']);
 
     // Rotas de recursos da API
-    Route::apiResource('atividades', AtividadeController::class);
-    Route::apiResource('problemas', ProblemaController::class);
+
     Route::apiResource('professores', ProfessorController::class)
         ->parameters(['professores' => 'professor']);
     Route::apiResource('alunos', AlunoController::class);
@@ -46,3 +45,6 @@ Route::middleware('auth:sanctum')->group(function () {
     // Rotas de correção
     Route::get('/correcao/busca-por-submissao/{submissao}', [CorrecaoController::class, 'buscaPorSubmissao']);
 });
+
+    Route::apiResource('atividades', AtividadeController::class);
+    Route::apiResource('problemas', ProblemaController::class);

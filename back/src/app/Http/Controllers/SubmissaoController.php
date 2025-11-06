@@ -144,23 +144,40 @@ class SubmissaoController extends Controller
     public function getSubmissionByUser(Request $request, int $atividade)
     {
         $userId = $request->user()->id;
+        \Log::info('Buscando submissões:', [
+            'atividade_id' => $atividade,
+            'user_id' => $userId
+        ]);
 
         $submissoes = Submissao::where('atividade_id', $atividade)
             ->where('user_id', $userId)
-            ->orderByDesc('data_submissao')
-            ->paginate(10);
+            ->orderByDesc('data_submissao');
+        
+        \Log::info('Query SQL:', [
+            'sql' => $submissoes->toSql(),
+            'bindings' => $submissoes->getBindings()
+        ]);
+        
+        $result = $submissoes->paginate(10);
 
-        return response()->json([
+        $response = [
             'atividade_id' => $atividade,
             'user_id' => $userId,
-            'submissoes' => $submissoes->items(),
+            'submissoes' => $result->items(),
             'paginacao' => [
-                'pagina_atual' => $submissoes->currentPage(),
-                'por_pagina' => $submissoes->perPage(),
-                'total' => $submissoes->total(),
-                'ultima_pagina' => $submissoes->lastPage(),
+                'pagina_atual' => $result->currentPage(),
+                'por_pagina' => $result->perPage(),
+                'total' => $result->total(),
+                'ultima_pagina' => $result->lastPage(),
             ],
+        ];
+        
+        \Log::info('Retornando submissões:', [
+            'total_encontrado' => $result->total(),
+            'items' => $result->items()
         ]);
+
+        return response()->json($response);
     }
 
     //    /**

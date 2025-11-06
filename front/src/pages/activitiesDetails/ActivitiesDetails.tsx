@@ -89,13 +89,11 @@ function formatDate(dateString: string) {
   const diffTime = date.getTime() - now.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-  const formatted = date.toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+const formatted = date.toLocaleDateString("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
 
   let relative = "";
   let isOverdue = false;
@@ -133,9 +131,10 @@ export default function ActivitiesDetails() {
     mapActivities,
     mapProblems,
     loading,
-    submissions,
     updateSubmissions,
   } = useData();
+
+  const [activitySubmissions, setActivitySubmissions] = useState<Submission[]>([]);
 
   const activityId = params.id;
 
@@ -152,17 +151,25 @@ export default function ActivitiesDetails() {
   }, [selectedActivity, mapProblems]);
 
   // Busca as submissões da atividade
-  // const fetchSubmissions = async (activity: Activity) => {
-  //   const data = await getSubmissionsByActivityId(activity.id);
-  //   setSubmissions(data);
-  // };
+  const fetchSubmissions = async (activity: Activity) => {
+    try {
+      setLocalLoading(true);
+      const data = await getSubmissionsByActivityId(String(activity.id));
+      setActivitySubmissions(data);
+    } catch (error) {
+      console.error("Erro ao buscar submissões da atividade:", error);
+      setActivitySubmissions([]); // limpa em caso de erro
+    } finally {
+      setLocalLoading(false);
+    }
+  };
 
   // Quando a atividade selecionada muda, busca o problema e as submissões
-  // useEffect(() => {
-  //   if (selectedActivity) {
-  //     fetchSubmissions(selectedActivity);
-  //   }
-  // }, [selectedActivity]);
+  useEffect(() => {
+    if (selectedActivity) {
+      fetchSubmissions(selectedActivity);
+    }
+  }, [selectedActivity]);
 
   // Redireciona para o detalhe da submissão ao clicar na linha da tabela
   function redirectToSubmission(submission: Submission) {
@@ -179,6 +186,10 @@ export default function ActivitiesDetails() {
         activityId: activityId,
       });
       await updateSubmissions();
+      // refresh local activity submissions as well
+      if (selectedActivity) {
+        await fetchSubmissions(selectedActivity);
+      }
       console.log("Submission response:", response);
       navigate(`/submissions`);
     } catch (error) {
@@ -189,7 +200,8 @@ export default function ActivitiesDetails() {
     }
   }
 
-  if (loading || localLoading) {
+  // Mostra loading enquanto carrega dados globais
+  if (loading) {
     return (
       <div className="max-w-7xl mx-auto p-6">
         <LoadingSpinner />
@@ -202,6 +214,16 @@ export default function ActivitiesDetails() {
     console.warn("Atividade ou problema não encontrado");
     return <div className="max-w-7xl mx-auto p-6"></div>;
   }
+
+  // Preparar o contador de submissões - mostrar spinner se estiver carregando
+  const submissionsCount = localLoading ? (
+    <div className="text-lg font-bold">
+      <Loader2 className="w-4 h-4 animate-spin inline mr-1" />
+      ...
+    </div>
+  ) : (
+    <div className="text-lg font-bold">{activitySubmissions.length}</div>
+  );
 
   const dueDate = formatDate(selectedActivity.dueDate);
 
@@ -245,7 +267,14 @@ export default function ActivitiesDetails() {
             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 text-center">
               <User className="w-5 h-5 mx-auto mb-1" />
               <div className="text-sm font-medium">Submissões</div>
-              <div className="text-lg font-bold">{submissions.length}</div>
+              {localLoading ? (
+                <div className="text-lg font-bold flex items-center justify-center">
+                  <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                  ...
+                </div>
+              ) : (
+                <div className="text-lg font-bold">{activitySubmissions.length}</div>
+              )}
               <div className="text-xs text-blue-200">tentativas</div>
             </div>
           </div>
@@ -306,26 +335,41 @@ export default function ActivitiesDetails() {
             <Button
               variant="outline"
               size="sm"
-              // onClick={() =>
-              //   // selectedActivity && fetchSubmissions(selectedActivity)
-              // }
+              onClick={() => selectedActivity && fetchSubmissions(selectedActivity)}
+              disabled={localLoading}
             >
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Atualizar
+              <RefreshCw className={`w-4 h-4 mr-2 ${localLoading ? 'animate-spin' : ''}`} />
+              {localLoading ? 'Atualizando...' : 'Atualizar'}
             </Button>
           </div>
         </div>
 
         <div className="p-6">
-          {submissions.length === 0 ? (
+          {localLoading ? (
+            <div className="text-center py-8">
+              <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                Carregando submissões...
+              </h3>
+            </div>
+          ) : activitySubmissions.length === 0 ? (
             <div className="text-center py-8">
               <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                Nenhuma submissão ainda
+                Nenhuma submissão para esta atividade
               </h3>
               <p className="text-gray-500">
-                Suas submissões aparecerão aqui após o envio
+                Use o editor acima para enviar seu código. Após enviar, suas submissões aparecerão aqui.
               </p>
+              <div className="mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                >
+                  Ir para o editor
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="overflow-hidden">
@@ -348,7 +392,7 @@ export default function ActivitiesDetails() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {submissions.map((submission) => {
+                  {activitySubmissions.map((submission: Submission) => {
                     const submissionDate = formatDate(submission.dateSubmitted);
                     return (
                       <TableRow
