@@ -8,6 +8,7 @@ use Exception;
 use App\Http\Requests\SubmissaoRequest;
 use Illuminate\Http\Request;
 use Throwable;
+use App\Lib\Dicionarios\Status;
 
 /**
  * @OA\Tag(
@@ -150,10 +151,21 @@ class SubmissaoController extends Controller
             ->orderByDesc('data_submissao')
             ->paginate(10);
 
+        $submissoesFormatted = collect($submissoes->items())->map(function (Submissao $submissao) {
+            $dados = $submissao->toArray();
+            $statusInfo = Status::get((int) $submissao->status_correcao_id) ?? null;
+
+            $dados['status'] = $statusInfo['nome'] ?? null;
+            $dados['status_descricao'] = $statusInfo['descricao'] ?? null;
+
+            unset($dados['status_correcao_id']);
+            return $dados;
+        })->all();
+
         $response = [
             'atividade_id' => $atividade,
             'user_id' => $userId,
-            'submissoes' => $submissoes->items(),
+            'submissoes' => $submissoesFormatted,
             'paginacao' => [
                 'pagina_atual' => $submissoes->currentPage(),
                 'por_pagina' => $submissoes->perPage(),
