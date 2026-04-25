@@ -98,7 +98,7 @@ services:
       - ./back/src/:/var/www/html:z
       - /var/www/html/vendor
     ports:
-      - "8001:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     command: "php -S 0.0.0.0:8000 -t public"
     depends_on:
       - postgres
