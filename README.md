@@ -1,87 +1,68 @@
-# IF Codes
+# IF-Codes - Sistema de Submissão de Atividades
 
-Plataforma de programacao competitiva com correcao automatica de codigo, desenvolvida como projeto integrador do IFMOC.
+Este projeto é uma plataforma para gerenciamento e submissão de atividades de programação, integrando Laravel (Backend), React (Frontend), Judge0 (Executor de código) e WebSockets.
 
-## Tecnologias
+## 🛠 Pré-requisitos
 
-| Camada | Stack |
-|---|---|
-| Frontend | React 19, TypeScript, Vite, TailwindCSS 4 |
-| Backend | Laravel 10, PHP 8.4, Sanctum |
-| Banco de dados | PostgreSQL 16 |
-| Judge | Judge0 (self-hosted) |
-| Jam Sessions | WebSocket sidecar (Node.js 20, Express, ws) |
-| Email (dev) | Mailpit |
-| Cache/Filas | Redis |
-| Infra | Docker Compose |
+- Docker e Docker Compose instalados.
+- Git.
 
-## Estrutura do repositorio
+## 🚀 Como Executar o Projeto
 
-```
-ifcodes/
-├── back/src/          # Laravel API
-├── front/             # React SPA
-├── jam-server/        # WebSocket sidecar para Jam Sessions
-├── docs/              # Documentacao (CD, melhorias futuras)
-├── .github/workflows/ # CI/CD pipelines
-├── docker-compose.yml          # Ambiente de desenvolvimento
-└── docker-compose.prod.yml     # Ambiente de producao
-```
+Siga os passos abaixo para subir o ambiente completo:
 
-## Setup de desenvolvimento
-
-### Pre-requisitos
-
-- [Git](https://git-scm.com/downloads)
-- [Docker](https://www.docker.com/) com Docker Compose V2
-
-### Instalacao
+### 1. Clonar e Configurar Variáveis de Ambiente
 
 ```bash
-git clone https://github.com/Rafael-Karele/ifcodes.git
-cd ifcodes
-```
-
-Configure o `.env` do backend:
-
-```bash
+# Copiar arquivos de configuração do Backend
 cp back/src/.env.example back/src/.env
+
+# Copiar arquivos de configuração do Frontend
+cp front/.env.example front/.env
+
+# Copiar configuração do Judge0
+cp judge0.conf.example judge0.conf
 ```
 
-Edite `back/src/.env` e preencha `DB_PASSWORD` com a senha definida em `judge0.conf`.
+**Nota:** As portas padrão configuradas são:
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:8001` (Porta alterada para evitar conflitos)
+- WebSocket: `ws://localhost:3002`
 
-Suba os containers:
+### 2. Subir os Containers
 
 ```bash
-docker compose up -d
+docker-compose up -d --build
+```
+
+### 3. Preparar o Banco de Dados
+
+```bash
+# Gerar chave da aplicação
 docker exec laravel_app php artisan key:generate
+
+# Executar migrations e alimentar o banco (Seeders)
 docker exec laravel_app php artisan migrate:fresh --seed
 ```
 
-### Acessando os servicos
+## 🔐 Credenciais Padrão (Seed)
 
-| Servico | URL |
-|---|---|
-| Frontend (Vite) | http://localhost:5173 |
-| Backend (Laravel) | http://localhost:8000 |
-| Judge0 API | http://localhost:2358 |
-| Mailpit (email) | http://localhost:8025 |
-| PostgreSQL | localhost:5432 |
+- **Admin:** `admin@admin.com` / `password`
+- **Professor:** `professor@ifcodes.com` / `password`
+- **Aluno:** `aluno@ifcodes.com` / `password`
 
-## CI/CD
+## 🐳 Estrutura de Serviços
 
-O projeto tem 4 workflows no GitHub Actions:
+- **laravel_app**: Backend na porta `8001`.
+- **react_app**: Frontend na porta `5173`.
+- **postgres**: Banco de dados PostgreSQL (porta `5432`).
+- **judge0_server**: API de execução de código (porta `2358`).
+- **ws_server**: Servidor de notificações WebSocket (porta `3002`).
+- **mailpit**: Interface de testes de e-mail (porta `8025`).
 
-| Workflow | Trigger | O que faz |
-|---|---|---|
-| `tests.yml` | PR para main | Detecta mudancas no backend e roda PHPUnit condicionalmente |
-| `frontend.yml` | PR para main (front/**) | TypeScript check + ESLint |
-| `phpunit.yml` | Chamado por outros workflows | Workflow reutilizavel com PHPUnit + PostgreSQL |
-| `deploy.yml` | Push na main | Deploy condicional por servico via SSH |
+## ⚠️ Solução de Problemas
 
-O deploy so reconstroi os servicos Docker que foram alterados (back, front, jam-server).
-
-Para mais detalhes, veja:
-- [docs/CD.md](docs/CD.md) — Pipeline de deploy e configuracao de secrets
-- [docs/staging.md](docs/staging.md) — Proposta de ambiente de staging
-- [docs/melhorias-futuras.md](docs/melhorias-futuras.md) — Nginx+FPM, GHCR e outras melhorias
+Se receber erros de `Connection Reset` ou `Invalid URL`:
+1. Verifique se a porta `8001` está acessível em seu navegador.
+2. Certifique-se de que o arquivo `front/.env` possui a variável `VITE_API_URL=http://localhost:8001`.
+3. Limpe o cache do navegador ou use uma aba anônima.
