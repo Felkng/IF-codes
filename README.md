@@ -7,53 +7,34 @@ Este projeto é uma plataforma para gerenciamento e submissão de atividades de 
 - Docker e Docker Compose instalados.
 - Git.
 
-## 🚀 Como Executar o Projeto
+## 🚀 Como Executar o Projeto (Recomendado)
 
-Siga os passos abaixo para subir o ambiente completo:
-
-### 1. Clonar e Configurar Variáveis de Ambiente
+O projeto possui um script de instalação automatizada que configura os arquivos `.env`, as chaves da aplicação e o banco de dados.
 
 ```bash
-# Copiar arquivos de configuração do Backend
-cp back/src/.env.example back/src/.env
+# 1. Torne o script executável
+chmod +x provision.sh
 
-# Copiar arquivos de configuração do Frontend
-cp front/.env.example front/.env
-
-# Copiar configuração do Judge0
-cp judge0.conf.example judge0.conf
+# 2. Execute o instalador
+./provision.sh
 ```
 
-**Nota:** As portas padrão configuradas são:
-- Frontend: `http://localhost:5173`
-- Backend API: `http://localhost:8001` (Porta alterada para evitar conflitos)
-- WebSocket: `ws://localhost:3002`
+O script solicitará:
+- Senha para o banco de dados.
+- Nome da aplicação.
+- Porta para o Backend (Padrão: 8001).
 
-### 2. Subir os Containers
-
-```bash
-docker-compose up -d --build
-```
-
-### 3. Preparar o Banco de Dados
-
-```bash
-# Gerar chave da aplicação
-docker exec laravel_app php artisan key:generate
-
-# Executar migrations e alimentar o banco (Seeders)
-docker exec laravel_app php artisan migrate:fresh --seed
-```
+---
 
 ## 🔐 Credenciais Padrão (Seed)
 
-- **Admin:** `admin@admin.com` / `password`
-- **Professor:** `professor@ifcodes.com` / `password`
-- **Aluno:** `aluno@ifcodes.com` / `password`
+- **Admin:** `admin@admin.com` / `12345678`
+- **Professor:** `professor@ifcodes.com` / `12345678`
+- **Aluno:** `aluno@ifcodes.com` / `12345678`
 
 ## 🐳 Estrutura de Serviços
 
-- **laravel_app**: Backend na porta `8001`.
+- **laravel_app**: Backend (porta definida no instalador).
 - **react_app**: Frontend na porta `5173`.
 - **postgres**: Banco de dados PostgreSQL (porta `5432`).
 - **judge0_server**: API de execução de código (porta `2358`).
@@ -63,6 +44,6 @@ docker exec laravel_app php artisan migrate:fresh --seed
 ## ⚠️ Solução de Problemas
 
 Se receber erros de `Connection Reset` ou `Invalid URL`:
-1. Verifique se a porta `8001` está acessível em seu navegador.
-2. Certifique-se de que o arquivo `front/.env` possui a variável `VITE_API_URL=http://localhost:8001`.
+1. Verifique se a porta escolhida está correta no arquivo `front/.env`.
+2. Certifique-se de que os containers estão rodando: `docker ps`.
 3. Limpe o cache do navegador ou use uma aba anônima.

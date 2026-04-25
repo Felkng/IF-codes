@@ -63,5 +63,5 @@ echo -e "${GREEN}       INSTALAÇÃO CONCLUÍDA COM SUCESSO!                  ${
 echo -e "${GREEN}==========================================================${NC}"
 echo -e "Frontend: http://localhost:5173"
 echo -e "Backend:  http://localhost:$APP_PORT"
-echo -e "Credenciais: admin@admin.com / password"
+echo -e "Credenciais: admin@admin.com / 12345678"
 echo -e "${GREEN}==========================================================${NC}"
