@@ -22,7 +22,7 @@ chmod +x provision.sh
 O script solicitará:
 - Senha para o banco de dados.
 - Nome da aplicação.
-- Porta para o Backend (Padrão: 8001).
+- Porta para o Backend (Padrão: 8000).
 
 ---
 

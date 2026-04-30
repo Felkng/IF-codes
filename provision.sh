@@ -11,57 +11,104 @@ echo -e "${BLUE}==========================================================${NC}"
 echo -e "${BLUE}          IF-CODES: INSTALADOR AUTOMATIZADO               ${NC}"
 echo -e "${BLUE}==========================================================${NC}"
 
-# 1. Coleta de dados
-echo -e "\n${YELLOW}--- Configurações de Banco de Dados ---${NC}"
-read -p "Digite a senha para o Banco de Dados (Postgres): " DB_PASSWORD
-if [ -z "$DB_PASSWORD" ]; then
-    DB_PASSWORD="changeme-please-set-strong-password"
-    echo -e "${YELLOW}Usando senha padrão: $DB_PASSWORD${NC}"
+# Função para compatibilidade do sed no macOS e Linux
+sedi() {
+    if [ "$(uname)" = "Darwin" ]; then
+        sed -i '' "$@"
+    else
+        sed -i "$@"
+    fi
+}
+
+IS_FIRST_RUN=false
+FULL_RESET=false
+
+echo -e "\n${YELLOW}--- Opções de Inicialização ---${NC}"
+read -p "Deseja realizar um full-reset (apagar TODOS os dados, volumes e reconfigurar o ambiente)? [s/N]: " FULL_RESET_CHOICE
+if [[ "$FULL_RESET_CHOICE" =~ ^[Ss]$ ]]; then
+    FULL_RESET=true
+    echo -e "${YELLOW}Preparando full-reset... Apagando containers, volumes e arquivos de configuração antigos...${NC}"
+    docker compose down -v > /dev/null 2>&1
+    rm -f back/src/.env judge0.conf front/.env
+else
+    docker compose down > /dev/null 2>&1
 fi
 
-echo -e "\n${YELLOW}--- Configurações Opcionais ---${NC}"
-read -p "Nome da Aplicação [IF-Codes]: " APP_NAME
-APP_NAME=${APP_NAME:-"IF-Codes"}
+# 1. Verificação de Arquivos de Configuração
+if [ ! -f "back/src/.env" ] || [ ! -f "judge0.conf" ] || [ ! -f "front/.env" ]; then
+    IS_FIRST_RUN=true
+    if [ "$FULL_RESET" = true ]; then
+        echo -e "\n${YELLOW}--- Full Reset: Novas Configurações ---${NC}"
+    else
+        echo -e "\n${YELLOW}--- Primeira execução detectada: Configurações Iniciais ---${NC}"
+    fi
 
-read -p "Porta do Backend [8001]: " APP_PORT
-APP_PORT=${APP_PORT:-"8001"}
+    read -p "Digite a senha para o Banco de Dados (Postgres): " DB_PASSWORD
+    if [ -z "$DB_PASSWORD" ]; then
+        DB_PASSWORD="changeme-please-set-strong-password"
+        echo -e "${YELLOW}Usando senha padrão: $DB_PASSWORD${NC}"
+    fi
 
-# 2. Criação dos arquivos .env
-echo -e "\n${BLUE}[1/4] Configurando arquivos .env...${NC}"
+    echo -e "\n${YELLOW}--- Configurações Opcionais ---${NC}"
+    read -p "Nome da Aplicação [IF-Codes]: " APP_NAME
+    APP_NAME=${APP_NAME:-"IF-Codes"}
 
-# Backend
-cp back/src/.env.example back/src/.env
-sed -i "s|APP_URL=.*|APP_URL=http://localhost:$APP_PORT|" back/src/.env
-sed -i "s|DB_PASSWORD=.*|DB_PASSWORD=$DB_PASSWORD|" back/src/.env
-sed -i "s|APP_NAME=.*|APP_NAME=\"$APP_NAME\"|" back/src/.env
+    read -p "Porta do Backend [8000]: " APP_PORT
+    APP_PORT=${APP_PORT:-"8000"}
 
-# Judge0
-cp judge0.conf.example judge0.conf
-sed -i "s|POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$DB_PASSWORD|" judge0.conf
+    # 2. Criação dos arquivos .env
+    echo -e "\n${BLUE}[1/4] Configurando arquivos .env...${NC}"
 
-# Frontend
-cp front/.env.example front/.env
-sed -i "s|VITE_API_URL=.*|VITE_API_URL=http://localhost:$APP_PORT|" front/.env
-sed -i "s|VITE_APP_NAME=.*|VITE_APP_NAME=\"$APP_NAME\"|" front/.env
+    # Backend
+    cp back/src/.env.example back/src/.env
+    sedi "s|APP_URL=.*|APP_URL=http://localhost:$APP_PORT|" back/src/.env
+    sedi "s|DB_PASSWORD=.*|DB_PASSWORD=$DB_PASSWORD|" back/src/.env
+    sedi "s|APP_NAME=.*|APP_NAME=\"$APP_NAME\"|" back/src/.env
+
+    # Judge0
+    cp judge0.conf.example judge0.conf
+    sedi "s|POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$DB_PASSWORD|" judge0.conf
+
+    # Frontend
+    cp front/.env.example front/.env
+    sedi "s|VITE_API_URL=.*|VITE_API_URL=http://localhost:$APP_PORT|" front/.env
+    sedi "s|VITE_APP_NAME=.*|VITE_APP_NAME=\"$APP_NAME\"|" front/.env
+else
+    echo -e "\n${GREEN}Configurações já existentes encontradas. Iniciando sistema...${NC}"
+    # Tenta extrair a porta do Backend do .env, assumindo 8000 como fallback
+    APP_PORT=$(grep "APP_URL=" back/src/.env | grep -o '[0-9]\+$')
+    APP_PORT=${APP_PORT:-"8000"}
+    
+    echo -e "${BLUE}[1/4] Arquivos .env carregados com sucesso.${NC}"
+fi
 
 # 3. Docker
-echo -e "${BLUE}[2/4] Subindo containers (isso pode demorar na primeira vez)...${NC}"
+echo -e "\n${BLUE}[2/4] Subindo containers (isso pode demorar na primeira vez)...${NC}"
 export BACKEND_PORT=$APP_PORT
-docker-compose down -v > /dev/null 2>&1
-docker-compose up -d --build
+docker compose up -d --build
 
 # 4. Inicialização do Laravel
-echo -e "${BLUE}[3/4] Aguardando inicialização do banco de dados (10s)...${NC}"
-sleep 10
+echo -e "\n${BLUE}[3/4] Aguardando inicialização do banco de dados...${NC}"
+until docker exec postgres pg_isready -U integrador -d ifcodes > /dev/null 2>&1; do
+    echo -ne "."
+    sleep 1
+done
+echo -e "\n${GREEN}Banco de dados pronto!${NC}"
 
-echo -e "${BLUE}[4/4] Executando Migrations e Seeds...${NC}"
-docker exec laravel_app php artisan key:generate --force
-docker exec laravel_app php artisan migrate:fresh --seed --force
+echo -e "\n${BLUE}[4/4] Atualizando/Semeando banco de dados (Migrations)...${NC}"
+if [ "$IS_FIRST_RUN" = true ]; then
+    docker exec laravel_app php artisan key:generate --force
+    docker exec laravel_app php artisan migrate:fresh --seed --force
+else
+    docker exec laravel_app php artisan migrate --force
+fi
 
 echo -e "\n${GREEN}==========================================================${NC}"
-echo -e "${GREEN}       INSTALAÇÃO CONCLUÍDA COM SUCESSO!                  ${NC}"
+echo -e "${GREEN}       SISTEMA INICIADO COM SUCESSO!                      ${NC}"
 echo -e "${GREEN}==========================================================${NC}"
 echo -e "Frontend: http://localhost:5173"
 echo -e "Backend:  http://localhost:$APP_PORT"
-echo -e "Credenciais: admin@admin.com / 12345678"
+if [ "$IS_FIRST_RUN" = true ]; then
+    echo -e "Credenciais Padrão: admin@admin.com / 12345678"
+fi
 echo -e "${GREEN}==========================================================${NC}"
