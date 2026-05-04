@@ -14,7 +14,8 @@ RUN apt-get update && apt-get install -y \
 
 # Instala as extensões PHP necessárias para Laravel e PostgreSQL.
 # (pdo_pgsql para a conexão com PostgreSQL)
-RUN docker-php-ext-install pdo pdo_pgsql pcntl bcmath
+RUN docker-php-ext-install pdo pdo_pgsql pdo_mysql pcntl bcmath
+RUN pecl install redis && docker-php-ext-enable redis
 
 # Instala o Composer.
 COPY --from=composer:2.8 /usr/bin/composer /usr/bin/composer

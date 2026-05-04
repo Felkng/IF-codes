@@ -98,7 +98,7 @@ services:
       - ./back/src/:/var/www/html:z
       - /var/www/html/vendor
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     command: "php artisan serve --host=0.0.0.0 --port=8000"
     depends_on:
       - postgres
@@ -150,10 +150,7 @@ services:
 
 networks:
   default:
-    enable_ipv6: true
-    ipam:
-      config:
-        - subnet: "2a02:4780:6e:1617:1::/80"
+    driver: bridge
 
 volumes:
   postgres_data:

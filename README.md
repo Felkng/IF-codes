@@ -1,87 +1,49 @@
-# IF Codes
+# IF-Codes - Sistema de Submissão de Atividades
 
-Plataforma de programacao competitiva com correcao automatica de codigo, desenvolvida como projeto integrador do IFMOC.
+Este projeto é uma plataforma para gerenciamento e submissão de atividades de programação, integrando Laravel (Backend), React (Frontend), Judge0 (Executor de código) e WebSockets.
 
-## Tecnologias
+## 🛠 Pré-requisitos
 
-| Camada | Stack |
-|---|---|
-| Frontend | React 19, TypeScript, Vite, TailwindCSS 4 |
-| Backend | Laravel 10, PHP 8.4, Sanctum |
-| Banco de dados | PostgreSQL 16 |
-| Judge | Judge0 (self-hosted) |
-| Jam Sessions | WebSocket sidecar (Node.js 20, Express, ws) |
-| Email (dev) | Mailpit |
-| Cache/Filas | Redis |
-| Infra | Docker Compose |
+- Docker e Docker Compose instalados.
+- Git.
 
-## Estrutura do repositorio
+## 🚀 Como Executar o Projeto (Recomendado)
 
-```
-ifcodes/
-├── back/src/          # Laravel API
-├── front/             # React SPA
-├── jam-server/        # WebSocket sidecar para Jam Sessions
-├── docs/              # Documentacao (CD, melhorias futuras)
-├── .github/workflows/ # CI/CD pipelines
-├── docker-compose.yml          # Ambiente de desenvolvimento
-└── docker-compose.prod.yml     # Ambiente de producao
-```
-
-## Setup de desenvolvimento
-
-### Pre-requisitos
-
-- [Git](https://git-scm.com/downloads)
-- [Docker](https://www.docker.com/) com Docker Compose V2
-
-### Instalacao
+O projeto possui um script de instalação automatizada que configura os arquivos `.env`, as chaves da aplicação e o banco de dados.
 
 ```bash
-git clone https://github.com/Rafael-Karele/ifcodes.git
-cd ifcodes
+# 1. Torne o script executável
+chmod +x provision.sh
+
+# 2. Execute o instalador
+./provision.sh
 ```
 
-Configure o `.env` do backend:
+O script solicitará:
+- Senha para o banco de dados.
+- Nome da aplicação.
+- Porta para o Backend (Padrão: 8000).
 
-```bash
-cp back/src/.env.example back/src/.env
-```
+---
 
-Edite `back/src/.env` e preencha `DB_PASSWORD` com a senha definida em `judge0.conf`.
+## 🔐 Credenciais Padrão (Seed)
 
-Suba os containers:
+- **Admin:** `admin@admin.com` / `12345678`
+- **Professor:** `professor@ifcodes.com` / `12345678`
+- **Aluno:** `aluno@ifcodes.com` / `12345678`
 
-```bash
-docker compose up -d
-docker exec laravel_app php artisan key:generate
-docker exec laravel_app php artisan migrate:fresh --seed
-```
+## 🐳 Estrutura de Serviços
 
-### Acessando os servicos
+- **laravel_app**: Backend (porta definida no instalador).
+- **react_app**: Frontend na porta `5173`.
+- **postgres**: Banco de dados PostgreSQL (porta `5432`).
+- **judge0_server**: API de execução de código (porta `2358`).
+- **ws_server**: Servidor de notificações WebSocket (porta `3002`).
+- **mailpit**: Interface de testes de e-mail (porta `8025`).
 
-| Servico | URL |
-|---|---|
-| Frontend (Vite) | http://localhost:5173 |
-| Backend (Laravel) | http://localhost:8000 |
-| Judge0 API | http://localhost:2358 |
-| Mailpit (email) | http://localhost:8025 |
-| PostgreSQL | localhost:5432 |
+## ⚠️ Solução de Problemas
 
-## CI/CD
-
-O projeto tem 4 workflows no GitHub Actions:
-
-| Workflow | Trigger | O que faz |
-|---|---|---|
-| `tests.yml` | PR para main | Detecta mudancas no backend e roda PHPUnit condicionalmente |
-| `frontend.yml` | PR para main (front/**) | TypeScript check + ESLint |
-| `phpunit.yml` | Chamado por outros workflows | Workflow reutilizavel com PHPUnit + PostgreSQL |
-| `deploy.yml` | Push na main | Deploy condicional por servico via SSH |
-
-O deploy so reconstroi os servicos Docker que foram alterados (back, front, jam-server).
-
-Para mais detalhes, veja:
-- [docs/CD.md](docs/CD.md) — Pipeline de deploy e configuracao de secrets
-- [docs/staging.md](docs/staging.md) — Proposta de ambiente de staging
-- [docs/melhorias-futuras.md](docs/melhorias-futuras.md) — Nginx+FPM, GHCR e outras melhorias
+Se receber erros de `Connection Reset` ou `Invalid URL`:
+1. Verifique se a porta escolhida está correta no arquivo `front/.env`.
+2. Certifique-se de que os containers estão rodando: `docker ps`.
+3. Limpe o cache do navegador ou use uma aba anônima.
