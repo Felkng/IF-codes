@@ -1,0 +1,176 @@
+x-logging:
+  &default-logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 50M
+
+services:
+
+  judge0_server:
+    image: mrkushalsm/judge0:cgv2
+    platform: linux/amd64
+    container_name: judge0_server
+    depends_on:
+      postgres:
+        condition: service_healthy
+      judge0_redis:
+        condition: service_healthy
+    volumes:
+      - ./judge0.conf:/judge0.conf:ro
+    privileged: true
+    <<: *default-logging
+    restart: always
+
+  judge0_workers:
+    image: mrkushalsm/judge0:cgv2
+    platform: linux/amd64
+    command: ["./scripts/workers"]
+    container_name: judge0_workers
+    depends_on:
+      postgres:
+        condition: service_healthy
+      judge0_redis:
+        condition: service_healthy
+    volumes:
+      - ./judge0.conf:/judge0.conf:ro
+    privileged: true
+    <<: *default-logging
+    restart: always
+
+  judge0_redis:
+    image: redis:7.2.4
+    container_name: judge0_redis
+    command: [
+      "bash", "-c",
+      "docker-entrypoint.sh --appendonly no --requirepass \"$$REDIS_PASSWORD\""
+    ]
+    env_file: judge0.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "$$REDIS_PASSWORD", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    <<: *default-logging
+    restart: always
+
+  laravel_redis:
+    image: redis:7.2.4
+    container_name: laravel_redis
+    command: ["redis-server", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    <<: *default-logging
+    restart: always
+
+  postgres:
+    image: postgres:16.2
+    container_name: postgres
+    env_file: judge0.conf
+    environment:
+      - POSTGRES_DB_BACKEND=ifcodes
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+      - ./init-backend-db.sh:/docker-entrypoint-initdb.d/init-backend-db.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    <<: *default-logging
+    restart: always
+
+  backend_app:
+    build:
+      context: ./back
+      dockerfile: src/docker/php/Dockerfile.prod
+    container_name: laravel_app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    env_file: ./back/src/.env
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      judge0_server:
+        condition: service_started
+      laravel_redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+  queue_worker:
+    build:
+      context: ./back
+      dockerfile: src/docker/php/Dockerfile.prod
+    container_name: laravel_queue
+    working_dir: /var/www/html
+    command: php artisan queue:work redis --queue=default --sleep=3 --tries=3
+    env_file: ./back/src/.env
+    depends_on:
+      backend_app:
+        condition: service_healthy
+      laravel_redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend_app:
+    build:
+      context: ./front
+      dockerfile: Dockerfile.prod
+    container_name: react_app
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:80"
+    depends_on:
+      backend_app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:80/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  ws_server:
+    build: ./ws-server
+    container_name: ws_server
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3002:3001"
+    volumes:
+      - /proc:/host/proc:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - LARAVEL_API_URL=http://laravel_app:8000
+      - PORT=3001
+      - REDIS_HOST=laravel_redis
+      - JUDGE0_API_URL=http://judge0_server:2358
+    depends_on:
+      backend_app:
+        condition: service_healthy
+      laravel_redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+networks:
+  default:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: "2a02:4780:6e:1617:1::/80"
+
+volumes:
+  postgres_data:

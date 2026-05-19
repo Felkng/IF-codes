@@ -9,7 +9,7 @@ services:
 
   # --- SERVIÇOS DO JUDGE0 ---
   judge0_server:
-    image: judge0/judge0:1.13.1
+    image: mrkushalsm/judge0:cgv2
     platform: linux/amd64
     container_name: judge0_server
     depends_on:
@@ -24,7 +24,7 @@ services:
     restart: always
 
   judge0_workers:
-    image: judge0/judge0:1.13.1
+    image: mrkushalsm/judge0:cgv2
     platform: linux/amd64
     command: ["./scripts/workers"]
     container_name: judge0_workers
@@ -98,7 +98,7 @@ services:
       - ./back/src/:/var/www/html:z
       - /var/www/html/vendor
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     command: "php artisan serve --host=0.0.0.0 --port=8000"
     depends_on:
       - postgres
@@ -117,10 +117,27 @@ services:
       - /app/node_modules
     ports:
       - "5173:5173"
-    environment:
-      - CHOKIDAR_USEPOLLING=true
     depends_on:
       - backend_app
+
+  # --- SERVIÇO DO WS SERVER (WebSocket genérico) ---
+  ws_server:
+    build: ./ws-server
+    container_name: ws_server
+    restart: unless-stopped
+    ports:
+      - "3002:3001"
+    volumes:
+      - /proc:/host/proc:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - LARAVEL_API_URL=http://laravel_app:8000
+      - PORT=3001
+      - REDIS_HOST=laravel_redis
+      - JUDGE0_API_URL=http://judge0_server:2358
+    depends_on:
+      - backend_app
+      - laravel_redis
 
   # --- SERVIÇO DE EMAIL (MAILPIT) ---
   mailpit:
@@ -130,6 +147,10 @@ services:
     ports:
       - "8025:8025"
       - "1025:1025"
+
+networks:
+  default:
+    driver: bridge
 
 volumes:
   postgres_data:

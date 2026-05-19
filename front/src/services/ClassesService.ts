@@ -30,7 +30,7 @@ function getAuthHeaders() {
 
 // Função auxiliar para tratamento de erros de autenticação
 function handleAuthError(error: unknown) {
-  if (axios.isAxiosError(error) && (error.response?.status === 401 || error.response?.status === 403)) {
+  if (axios.isAxiosError(error) && error.response?.status === 401) {
     localStorage.removeItem("auth_token");
     window.location.href = "/login";
   }
@@ -121,6 +121,7 @@ export const ClassesService = {
       const alunos = classData.alunos || [];
       
       // Mapear os dados da API para o formato esperado pelo componente
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return alunos.map((aluno: any) => ({
         id: aluno.id,
         classId: classData.id,

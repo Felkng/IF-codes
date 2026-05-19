@@ -1,4 +1,3 @@
-import App from "@/App";
 import Activities from "@/pages/activities/Activities";
 import ActivitiesDetails from "@/pages/activitiesDetails/ActivitiesDetails";
 import AppLayout from "@/pages/AppLayout";
@@ -16,9 +15,13 @@ import ClassDetails from "@/pages/classDetails/ClassDetails";
 import SubmissionsDetails from "@/pages/submissionsDetails/SubmissionsDetails";
 import Problems from "@/pages/problems/Problems";
 import RequireAuth from "@/pages/RequireAuth";
+import RedirectIfAuth from "@/pages/RedirectIfAuth";
 import RequireRole from "@/pages/RequireRole";
 import ProfileView from "@/pages/perfil/ProfileView";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router";
+import JamCreate from "@/pages/jam/JamCreate";
+import JamView from "@/pages/jam/JamView";
+import Monitoring from "@/pages/monitoring/Monitoring";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 
 function NotFound() {
   const location = useLocation();
@@ -39,13 +42,15 @@ export default function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/password-reset/:token" element={<ResetPassword />} />
+        <Route element={<RedirectIfAuth />}>
+          <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/password-reset/:token" element={<ResetPassword />} />
+        </Route>
         <Route path="/unauthorized" element={<Unauthorized />} />
         <Route element={<RequireAuth />}>
           <Route path="/" element={<AppLayout />}>
-            <Route index element={<App />} />
+            <Route index element={<Navigate to="/home" replace />} />
             <Route path="home" element={<Home />} />
             <Route element={<RequireRole allowedRoles={["student", "professor", "admin"]} />}>
               <Route path="change-password" element={<ChangePassword />} />
@@ -65,6 +70,7 @@ export default function AppRouter() {
             <Route element={<RequireRole allowedRoles={["admin"]} />}>
               <Route path="students" element={<Students />} />
               <Route path="teachers" element={<Teachers />} />
+              <Route path="monitoring" element={<Monitoring />} />
             </Route>
             <Route element={<RequireRole allowedRoles={["admin", "professor"]} />}>
               <Route path="problems" element={<Problems />} />
@@ -73,6 +79,10 @@ export default function AppRouter() {
               <Route path="classes">
                 <Route index element={<Classes />} />
                 <Route path=":id" element={<ClassDetails />} />
+              </Route>
+              <Route path="jam">
+                <Route path="create/:turmaId" element={<JamCreate />} />
+                <Route path=":jamId" element={<JamView />} />
               </Route>
             </Route>
           </Route>

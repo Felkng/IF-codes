@@ -12,6 +12,9 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use App\Lib\Dicionarios\Status;
+use App\Models\JamParticipant;
+use App\Services\JamSubmissaoService;
+use App\Support\RealtimeNotifier;
 use Throwable;
 
 class CheckSubmissionStatusJob implements ShouldQueue
@@ -23,7 +26,9 @@ class CheckSubmissionStatusJob implements ShouldQueue
 
     private const PENDING_STATUSES = [1, 2];
     private const POLLING_DELAY_SECONDS = 1;
-    private const MAX_ATTEMPTS = 15;
+    private const POLLING_DELAY_SLOW_SECONDS = 2;
+    private const SLOW_THRESHOLD = 15;
+    private const MAX_ATTEMPTS = 25;
 
     private int $submissaoId;
     private int $remainingAttempts;
@@ -58,8 +63,13 @@ class CheckSubmissionStatusJob implements ShouldQueue
         }
 
         $possuiPendentes = false;
+        $testResults = [];
 
         foreach ($resultados as $resultado) {
+            if (is_null($resultado) || !isset($resultado['token'])) {
+                continue;
+            }
+
             $correcao = $submissao->correcoes->firstWhere('token', $resultado['token']);
 
             if (is_null($correcao)) {
@@ -72,6 +82,12 @@ class CheckSubmissionStatusJob implements ShouldQueue
             }
 
             $statusId = $resultado['status_id'];
+            $compileOutput = isset($resultado['compile_output'])
+                ? base64_decode($resultado['compile_output'])
+                : null;
+            $stdout = isset($resultado['stdout'])
+                ? base64_decode($resultado['stdout'])
+                : null;
 
             if (in_array($statusId, self::PENDING_STATUSES, true)) {
                 $possuiPendentes = true;
@@ -79,11 +95,29 @@ class CheckSubmissionStatusJob implements ShouldQueue
             } elseif ($statusId != STATUS::ACEITA) {
                 $submissao->status_correcao_id = $statusId;
                 $submissao->save();
+
+                $statusInfo = Status::get($statusId);
+                $testResults[] = [
+                    'caso_teste_id' => $correcao->caso_teste_id,
+                    'status' => $statusInfo['nome'] ?? 'Erro',
+                    'compile_output' => $compileOutput,
+                    'stdout' => $stdout,
+                ];
+
+                RealtimeNotifier::toUser($submissao->user_id, 'submission.updated');
+                $this->notifyJamSidecarIfNeeded($submissao, 'failed', $statusInfo['nome'] ?? 'Erro', $testResults);
                 return;
             }
 
             $correcao->status_correcao_id = $statusId;
             $correcao->save();
+
+            $testResults[] = [
+                'caso_teste_id' => $correcao->caso_teste_id,
+                'status' => 'Aceita',
+                'compile_output' => null,
+                'stdout' => $stdout,
+            ];
         }
 
         if ($possuiPendentes) {
@@ -94,16 +128,44 @@ class CheckSubmissionStatusJob implements ShouldQueue
 
                 $submissao->status_correcao_id = STATUS::TEMPO_LIMITE_EXCEDIDO;
                 $submissao->save();
-
+                RealtimeNotifier::toUser($submissao->user_id, 'submission.updated');
+                $this->notifyJamSidecarIfNeeded($submissao, 'error', 'Tempo Limite Excedido', $testResults);
                 return;
             }
 
+            $delay = $this->remainingAttempts <= self::SLOW_THRESHOLD
+                ? self::POLLING_DELAY_SLOW_SECONDS
+                : self::POLLING_DELAY_SECONDS;
+
             CheckSubmissionStatusJob::dispatch($this->submissaoId, $this->remainingAttempts - 1)
-                ->delay(now()->addSeconds(self::POLLING_DELAY_SECONDS));
+                ->delay(now()->addSeconds($delay));
         } else {
             $submissao->status_correcao_id = Status::ACEITA;
             $submissao->save();
+            RealtimeNotifier::toUser($submissao->user_id, 'submission.updated');
+            $this->notifyJamSidecarIfNeeded($submissao, 'passed', 'Aceita', $testResults);
             return;
         }
+    }
+
+    private function notifyJamSidecarIfNeeded(Submissao $submissao, string $jamStatus, string $statusMessage, array $testResults = []): void
+    {
+        $jamParticipant = JamParticipant::where('submissao_id', $submissao->id)->first();
+
+        if (!$jamParticipant) {
+            return;
+        }
+
+        $jamParticipant->update(['status' => $jamStatus]);
+
+        (new JamSubmissaoService())->notifySidecar(
+            $jamParticipant->jam_session_id,
+            $jamParticipant->user_id,
+            $jamStatus,
+            [
+                'statusMessage' => $statusMessage,
+                'testResults' => $testResults,
+            ],
+        );
     }
 }

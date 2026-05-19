@@ -13,18 +13,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import Editor from "@monaco-editor/react";
-import { postSubmission } from "@/services/SubmissionsService";
-import type { Activity } from "@/types";
 
 /**
  * Componente de submissão de código com integração ao Monaco Editor.
  * Permite edição de código C, visualização em tela cheia e submissão.
  */
 interface CodeSubmissionProps {
-  onSubmit: (code: string) => void;
+  onSubmit: (code: string) => void | Promise<void>;
+  disabled?: boolean;
 }
 
-export function CodeSubmissionComponent({ onSubmit }: CodeSubmissionProps) {
+export function CodeSubmissionComponent({ onSubmit, disabled = false }: CodeSubmissionProps) {
   // Estado para alternar entre modo normal e tela cheia
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -34,13 +33,14 @@ export function CodeSubmissionComponent({ onSubmit }: CodeSubmissionProps) {
   );
 
   // Estado para arquivo de submissão (suporte a upload futuro)
-  const [submissionCodeFile, setSubmissionCodeFile] = useState(null);
+  const [submissionCodeFile, _setSubmissionCodeFile] = useState<File | null>(null);
 
   // Estado para texto extraído do arquivo de submissão (suporte futuro)
-  const [submissionCodeText, setSubmissionCodeText] = useState("");
+  const [submissionCodeText, _setSubmissionCodeText] = useState("");
 
   // Estado de carregamento no envio
-  const [submitting, setSubmitting] = useState(false);
+  const [internalSubmitting, setInternalSubmitting] = useState(false);
+  const isDisabled = disabled || internalSubmitting;
 
   // Referência para o editor Monaco, possibilitando comandos diretos
   const editorRef = useRef(null);
@@ -56,7 +56,8 @@ export function CodeSubmissionComponent({ onSubmit }: CodeSubmissionProps) {
    * Função chamada ao montar o editor Monaco.
    * Permite configurar atalhos e opções extras do editor.
    */
-  const handleEditorDidMount = (editor, monaco) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleEditorDidMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
 
     // Configurações visuais e funcionais do editor
@@ -82,7 +83,7 @@ export function CodeSubmissionComponent({ onSubmit }: CodeSubmissionProps) {
   /**
    * Atualiza o estado do código conforme o usuário digita.
    */
-  const handleEditorChange = (value) => {
+  const handleEditorChange = (value: string | undefined) => {
     setCodeValue(value || "");
   };
 
@@ -91,7 +92,13 @@ export function CodeSubmissionComponent({ onSubmit }: CodeSubmissionProps) {
    * Adicione aqui a lógica real de envio para o backend.
    */
   const handleSubmit = async () => {
-    onSubmit(codeValue);
+    if (isDisabled) return;
+    setInternalSubmitting(true);
+    try {
+      await onSubmit(codeValue);
+    } finally {
+      setInternalSubmitting(false);
+    }
   };
 
   // ----- Renderização do modo tela cheia (fullscreen) -----
@@ -176,10 +183,10 @@ export function CodeSubmissionComponent({ onSubmit }: CodeSubmissionProps) {
                 {/* Botão de submissão */}
                 <Button
                   onClick={handleSubmit}
-                  // disabled={submitting || !codeValue.trim()}
+                  disabled={isDisabled}
                   className="flex items-center gap-2"
                 >
-                  {submitting ? (
+                  {isDisabled ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Enviando...
@@ -265,10 +272,9 @@ export function CodeSubmissionComponent({ onSubmit }: CodeSubmissionProps) {
             {submissionCodeText && (
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Prévia do código:</Label>
-                <CodePreview
-                  code={submissionCodeText}
-                  filename={submissionCodeFile.name}
-                />
+                <pre className="bg-gray-50 p-3 rounded-lg text-sm overflow-auto">
+                  {submissionCodeText}
+                </pre>
               </div>
             )}
           </div>
@@ -282,10 +288,10 @@ export function CodeSubmissionComponent({ onSubmit }: CodeSubmissionProps) {
 
           <Button
             onClick={handleSubmit}
-            // disabled={submitting || !codeValue.trim()}
+            disabled={disabled}
             className="flex items-center gap-2"
           >
-            {submitting ? (
+            {disabled ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 Enviando...

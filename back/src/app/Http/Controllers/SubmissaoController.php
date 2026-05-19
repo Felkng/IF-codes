@@ -18,6 +18,10 @@ use App\Lib\Dicionarios\Status;
  */
 class SubmissaoController extends Controller
 {
+    private function resolveStatusFromDb(Submissao $submissao): int
+    {
+        return $submissao->status_correcao_id ?? Status::NA_FILA;
+    }
     /**
      * @OA\Get(
      *      path="/api/submissoes",
@@ -47,7 +51,8 @@ class SubmissaoController extends Controller
         $submissoesFormatted = collect($submissoes)->map(function (Submissao $submissao) {
             $dados = $submissao->toArray();
 
-            $statusInfo = Status::get((int) ($submissao->status_correcao_id ?? Status::NA_FILA));
+            $statusFinal = $this->resolveStatusFromDb($submissao);
+            $statusInfo = Status::get((int) $statusFinal);
             $dados['status'] = $statusInfo['nome'] ?? null;
             $dados['status_descricao'] = $statusInfo['descricao'] ?? null;
 
@@ -101,6 +106,31 @@ class SubmissaoController extends Controller
      */
     public function store(SubmissaoRequest $request)
     {
+        $userId = auth()->id();
+
+        // Bloqueia se o usuário já tem submissão pendente/processando nesta atividade
+        $hasPending = Submissao::where('user_id', $userId)
+            ->where('atividade_id', $request->atividade_id)
+            ->whereIn('status_correcao_id', [Status::NA_FILA, Status::EM_PROCESSAMENTO])
+            ->exists();
+
+        if ($hasPending) {
+            return response()->json([
+                'message' => 'Você já possui uma submissão sendo avaliada nesta atividade. Aguarde o resultado antes de enviar outra.'
+            ], 429);
+        }
+
+        // Rate limit geral: máximo 5 submissões por minuto
+        $recentCount = Submissao::where('user_id', $userId)
+            ->where('created_at', '>=', now()->subMinute())
+            ->count();
+
+        if ($recentCount >= 5) {
+            return response()->json([
+                'message' => 'Limite de submissões atingido. Aguarde 1 minuto.'
+            ], 429);
+        }
+
         $submissaoService = new SubmissaoService($request);
 
         if (!$submissaoService->salvar()) {
@@ -168,7 +198,7 @@ class SubmissaoController extends Controller
     {
         $userId = $request->user()->id;
 
-        $submissoes = Submissao::with('atividade.problema')
+        $submissoes = Submissao::with(['atividade.problema'])
             ->where('atividade_id', $atividade)
             ->where('user_id', $userId)
             ->orderByDesc('data_submissao')
@@ -177,7 +207,8 @@ class SubmissaoController extends Controller
         $submissoesFormatted = collect($submissoes->items())->map(function (Submissao $submissao) {
             $dados = $submissao->toArray();
 
-            $statusInfo = Status::get((int) ($submissao->status_correcao_id ?? Status::NA_FILA));
+            $statusFinal = $this->resolveStatusFromDb($submissao);
+            $statusInfo = Status::get((int) $statusFinal);
             $dados['status'] = $statusInfo['nome'] ?? null;
             $dados['status_descricao'] = $statusInfo['descricao'] ?? null;
 

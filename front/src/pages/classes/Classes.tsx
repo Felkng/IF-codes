@@ -1,20 +1,27 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useEffect, useState, useRef } from "react";
 import type { Class, CreateClassDTO } from "@/types/classes";
 import ClassesService from "@/services/ClassesService";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import Loading from "@/components/Loading";
 import Notification from "@/components/Notification";
-import { Plus, Edit, Trash2, Users, Search, ArrowRight, UserPlus, GraduationCap } from "lucide-react";
+import {
+  Plus,
+  BookOpen,
+  X,
+  Sparkles,
+} from "lucide-react";
+import { SearchFilter } from "@/components/SearchFilter";
+import { HeroHeader } from "@/components/HeroHeader";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useUser } from "@/context/UserContext";
+import { ClassCard } from "./ClassCard";
+import { ClassFormInline } from "./ClassFormInline";
 
+/* ================================================================== */
 export default function Classes() {
-  const navigate = useNavigate();
   const { hasAnyRole } = useUserRole();
   const { user } = useUser();
+
   const [classes, setClasses] = useState<Class[]>([]);
   const [filteredClasses, setFilteredClasses] = useState<Class[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,28 +32,31 @@ export default function Classes() {
     message: string;
     type: "success" | "error";
   } | null>(null);
-
   const [formData, setFormData] = useState<CreateClassDTO>({
     nome: "",
-    professor_id: 0, // Será preenchido com o ID do professor logado
+    professor_id: 0,
   });
 
+  /* refs for staggered card animation */
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  /* ── data loading ───────────────────────────────────────── */
   useEffect(() => {
     loadClasses();
-    // Define o professor_id se o usuário logado for professor
     if (user && user.roles?.includes("professor")) {
       setFormData((prev) => ({ ...prev, professor_id: user.id }));
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {
     filterClasses();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm, classes]);
 
   const loadClasses = async () => {
     try {
       setLoading(true);
-      // Se o usuário logado for estudante, buscar apenas suas turmas
       if (user && user.roles && user.roles.includes("student")) {
         const data = await ClassesService.getClassesByStudent();
         setClasses(data);
@@ -69,16 +79,15 @@ export default function Classes() {
       setFilteredClasses(classes);
       return;
     }
-
     const filtered = classes.filter((cls) =>
       cls.nome.toLowerCase().includes(searchTerm.toLowerCase())
     );
     setFilteredClasses(filtered);
   };
 
+  /* ── CRUD handlers ──────────────────────────────────────── */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     try {
       if (editingClass) {
         await ClassesService.updateClass(editingClass.id, formData);
@@ -87,7 +96,6 @@ export default function Classes() {
         await ClassesService.createClass(formData);
         showNotification("Turma criada com sucesso!", "success");
       }
-
       resetForm();
       loadClasses();
     } catch (error) {
@@ -98,16 +106,12 @@ export default function Classes() {
 
   const handleEdit = (cls: Class) => {
     setEditingClass(cls);
-    setFormData({
-      nome: cls.nome,
-      professor_id: cls.professor_id,
-    });
+    setFormData({ nome: cls.nome, professor_id: cls.professor_id });
     setShowForm(true);
   };
 
   const handleDelete = async (id: number) => {
     if (!confirm("Tem certeza que deseja excluir esta turma?")) return;
-
     try {
       await ClassesService.deleteClass(id);
       showNotification("Turma excluída com sucesso!", "success");
@@ -119,10 +123,7 @@ export default function Classes() {
   };
 
   const resetForm = () => {
-    setFormData({
-      nome: "",
-      professor_id: user?.id || 0,
-    });
+    setFormData({ nome: "", professor_id: user?.id || 0 });
     setEditingClass(null);
     setShowForm(false);
   };
@@ -132,10 +133,33 @@ export default function Classes() {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  /* ── loading state ──────────────────────────────────────── */
   if (loading) return <Loading />;
 
+  const isProfOrAdmin = hasAnyRole(["professor", "admin"]);
+
+  /* ================================================================ */
   return (
-    <div className="container mx-auto p-6">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 sm:py-5 min-h-[80vh]">
+      {/* ---- scoped keyframes ---- */}
+      <style>{`
+        @keyframes classes-fade-up {
+          from { opacity: 0; transform: translateY(18px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes classes-slide-down {
+          from { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; }
+          to   { opacity: 1; max-height: 480px; }
+        }
+        .cls-card {
+          animation: classes-fade-up .45s cubic-bezier(.22,1,.36,1) both;
+        }
+        .cls-form-enter {
+          animation: classes-slide-down .35s cubic-bezier(.22,1,.36,1) both;
+          overflow: hidden;
+        }
+      `}</style>
+
       {notification && (
         <Notification
           message={notification.message}
@@ -144,167 +168,85 @@ export default function Classes() {
         />
       )}
 
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-          <div className="p-2 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg">
-            <GraduationCap className="w-6 h-6 text-white" />
-          </div>
-          Turmas
-          </h1>
-        {hasAnyRole(["professor", "admin"]) && (
-          <Button onClick={() => setShowForm(!showForm)} 
-          className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:opacity-90 font-medium transition-opacity shadow-md">
-            <Plus className="w-4 h-4 mr-2" />
-            Nova Turma
+      {/* ======= HERO / HEADER AREA ======= */}
+      <HeroHeader
+        icon={BookOpen}
+        title="Minhas Turmas"
+        description={isProfOrAdmin
+          ? "Gerencie suas turmas, adicione alunos e acompanhe o progresso de cada grupo."
+          : "Veja as turmas em que você está matriculado e acesse as atividades."}
+      />
+
+      {/* ======= SEARCH BAR + NEW CLASS BUTTON ======= */}
+      <div className="flex items-center gap-3 mb-6">
+        <div className="flex-1">
+          <SearchFilter
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            placeholder="Buscar turma por nome…"
+          />
+        </div>
+        {isProfOrAdmin && (
+          <Button
+            onClick={() => setShowForm(!showForm)}
+            className="shrink-0 bg-teal-600 text-white font-semibold hover:bg-teal-700 transition-colors rounded-xl px-5 h-10"
+          >
+            {showForm ? (
+              <>
+                <X className="w-4 h-4 mr-1.5" /> Fechar
+              </>
+            ) : (
+              <>
+                <Plus className="w-4 h-4 mr-1.5" /> Nova Turma
+              </>
+            )}
           </Button>
         )}
       </div>
 
-      {/* Busca */}
-      <div className="mb-6">
-        <div className="relative">
-          <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
-          <Input
-            type="text"
-            placeholder="Buscar por nome..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-      </div>
-
-      {/* Formulário */}
+      {/* ── inline form ── */}
       {showForm && (
-        <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-          <h2 className="text-xl font-semibold mb-4">
-            {editingClass ? "Editar Turma" : "Nova Turma"}
-          </h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="nome" className="mb-2 block">Nome</Label>
-                <Input
-                  id="nome"
-                  value={formData.nome}
-                  onChange={(e) =>
-                    setFormData({ ...formData, nome: e.target.value })
-                  }
-                  required
-                  placeholder="Ex: Programação I"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <Button type="submit"
-              className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:opacity-90 font-medium transition-opacity shadow-md"
-              >
-                {editingClass ? "Atualizar" : "Salvar"}
-              </Button>
-              <Button type="button" variant="outline" onClick={resetForm}
-              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors hover:bg-red-600 hover:text-white"
-              >
-                Cancelar
-              </Button>
-            </div>
-          </form>
-        </div>
+        <ClassFormInline
+          formData={formData}
+          editingClass={editingClass}
+          onFormDataChange={setFormData}
+          onSubmit={handleSubmit}
+          onCancel={resetForm}
+        />
       )}
 
-      {/* Lista de Turmas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* ======= CARDS GRID ======= */}
+      <div
+        ref={gridRef}
+        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4"
+      >
         {filteredClasses.length === 0 ? (
-          <div className="col-span-full text-center py-12 text-gray-500">
-            {searchTerm
-              ? "Nenhuma turma encontrada"
-              : "Nenhuma turma cadastrada"}
+          /* ── empty state ── */
+          <div className="col-span-full flex flex-col items-center justify-center py-24 text-center">
+            <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-teal-100">
+              <Sparkles className="w-9 h-9 text-teal-600" />
+            </div>
+            <p className="text-base sm:text-lg font-semibold text-stone-700">
+              {searchTerm ? "Nenhuma turma encontrada" : "Nenhuma turma por aqui"}
+            </p>
+            <p className="mt-1 text-sm text-stone-400 max-w-xs">
+              {searchTerm
+                ? "Tente ajustar o termo de busca."
+                : isProfOrAdmin
+                  ? "Crie sua primeira turma para começar."
+                  : "Você ainda não está matriculado em nenhuma turma."}
+            </p>
           </div>
         ) : (
-          filteredClasses.map((cls) => (
-            <div
+          filteredClasses.map((cls, i) => (
+            <ClassCard
               key={cls.id}
-              className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow"
-            >
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h3 className="text-xl font-semibold">{cls.nome}</h3>
-                </div>
-                {hasAnyRole(["professor", "admin"]) && (
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors hover:bg-blue-600 hover:text-white"
-                      onClick={() => handleEdit(cls)}
-                    >
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors hover:bg-red-600 hover:text-white"
-                      onClick={() => handleDelete(cls.id)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-2 text-sm">
-                {cls.teacherName && (
-                  <p>
-                    <span className="font-semibold">Professor:</span>{" "}
-                    {cls.teacherName}
-                  </p>
-                )}
-                <div className="flex items-center gap-2 text-gray-600 pt-2">
-                  <Users className="w-4 h-4" />
-                  <span>{cls.studentsCount || 0} alunos</span>
-                </div>
-              </div>
-
-              <div className="mt-4 space-y-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => navigate(`/classes/${cls.id}`)}
-                  className="w-full border border-blue-600 
-                    text-blue-600 
-                    rounded-lg 
-                    transition-all 
-                    duration-300 
-                    hover:text-white 
-                    hover:border-transparent 
-                    hover:bg-gradient-to-r 
-                    hover:from-blue-500 
-                    hover:to-purple-500"
-                >
-                  Ver Detalhes
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-                {hasAnyRole(["professor", "admin"]) && (
-                  <Button
-                    size="sm"
-                    onClick={() => navigate(`/classes/${cls.id}?tab=students`)}
-                    className="w-full
-                    bg-black 
-                    text-white 
-                    rounded-lg 
-                    transition-all 
-                    duration-300 
-                    hover:bg-white 
-                    hover:text-black 
-                    border 
-                    border-black"
-                  >
-                    <UserPlus className="w-4 h-4 mr-2" />
-                    Gerenciar Alunos
-                  </Button>
-                )}
-              </div>
-            </div>
+              cls={cls}
+              index={i}
+              isProfOrAdmin={isProfOrAdmin}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
           ))
         )}
       </div>

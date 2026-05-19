@@ -17,6 +17,15 @@ export type Activity = {
   // title: string;
   dueDate: string; // ISO date string
   status: ActivityStatus;
+  tempoLimite?: number | null;
+  memoriaLimite?: number | null;
+  compilerOptions?: string | null;
+  commandLineArguments?: string | null;
+  redirectStderrToStdout?: boolean | null;
+  wallTimeLimit?: number | null;
+  stackLimit?: number | null;
+  maxFileSize?: number | null;
+  maxProcessesAndOrThreads?: number | null;
 };
 
 export type Problem = {
@@ -26,6 +35,7 @@ export type Problem = {
   timeLimitMs: number;
   memoryLimitKb: number;
   testCases?: TestCase[];
+  testCasesCount?: number;
   atividades_count?: number;
 };
 
@@ -59,6 +69,8 @@ export type TestCaseResult = {
   status: string;
   stdout?: string | null;
   stderr?: string | null;
+  compileOutput?: string | null;
+  message?: string | null;
 };
 
 export type SubmissionReport = {
@@ -123,3 +135,6 @@ export type Professor = {
 
 // Classes/Turmas
 export * from './classes';
+
+// Jam Sessions
+export * from './jam';

@@ -1,11 +1,12 @@
 import { changePassword } from "@/services/ChangePasswordService";
 import { useState } from "react";
-import showIcon from "@/assets/icons/password-show.svg";
-import hideIcon from "@/assets/icons/password-hide.svg";
 import { useNavigate } from "react-router";
 import axios from "axios";
 import Notification from "@/components/Notification";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 
 export default function ChangePassword() {
     const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -13,6 +14,7 @@ export default function ChangePassword() {
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
+    const [submitting, setSubmitting] = useState(false);
     const [currentPassword, setCurrentPassword] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
@@ -44,7 +46,7 @@ export default function ChangePassword() {
         const currentErr = validateCurrentPassword(currentPassword);
         const newErr = validateNewPassword(newPassword);
         const confirmErr = validateConfirmPassword(confirmPassword, newPassword);
-        
+
         setCurrentPasswordError(currentErr);
         setNewPasswordError(newErr);
         setConfirmPasswordError(confirmErr);
@@ -52,21 +54,20 @@ export default function ChangePassword() {
         if (currentErr || newErr || confirmErr) return;
 
         try {
+            setSubmitting(true);
             await changePassword({
                 currentPassword,
                 newPassword,
                 newPasswordConfirmation: confirmPassword
             });
-            
+
             setSuccess("Senha alterada com sucesso! Você será redirecionado para fazer login novamente.");
-            
-            // Limpa o token e redireciona após 2 segundos
+
             setTimeout(() => {
                 localStorage.removeItem("auth_token");
                 navigate("/login");
             }, 2000);
-            
-        } catch (error: any) {
+        } catch (error: unknown) {
             if (axios.isAxiosError(error)) {
                 if (error.response?.status === 422) {
                     setError(error.response?.data?.message || "A senha atual está incorreta.");
@@ -74,146 +75,165 @@ export default function ChangePassword() {
                     setError("Erro ao alterar senha. Tente novamente.");
                 }
             } else {
-                setError(`Um erro inesperado ocorreu: ${error.message}`);
-                console.log('erro: ', error);
+                setError(`Um erro inesperado ocorreu: ${error instanceof Error ? error.message : String(error)}`);
             }
+        } finally {
+            setSubmitting(false);
         }
-        
+
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
     }
 
     return (
-        <>
+        <div className="min-h-screen flex items-center justify-center px-4 bg-stone-50">
             {error && <Notification type="error" message={error} onClose={() => setError(null)} />}
             {success && <Notification type="success" message={success} onClose={() => setSuccess(null)} />}
-            <div className="w-full min-h-screen flex justify-center items-start bg-white p-4 pt-20">
-                <div className="w-full max-w-md bg-white shadow-xl rounded-2xl p-8">
+
+            <div className="w-full max-w-md space-y-6">
+                {/* Header */}
+                <div>
                     <button
                         type="button"
                         onClick={() => navigate(-1)}
-                        className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1 mb-6 transition-colors"
-                        title="Voltar"
+                        className="inline-flex items-center gap-1 text-sm font-medium text-teal-600 hover:text-teal-700 transition-colors mb-4"
                     >
                         <ArrowLeft className="w-4 h-4" />
-                        <span>Voltar</span>
+                        Voltar
                     </button>
 
-                    <h2 className="text-2xl font-semibold text-gray-800 text-center mb-6">
-                        Alterar Senha
-                    </h2>
+                    <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Alterar Senha</h1>
+                    <p className="text-stone-400 text-sm mt-1">Atualize sua senha para manter a conta segura</p>
+                </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Form card */}
+                <div className="rounded-xl border border-stone-200 bg-white p-4 sm:p-6">
+                    <form onSubmit={handleSubmit} className="space-y-5">
 
                         {/* Senha Atual */}
-                        <div className="relative">
-                            <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                        <div>
+                            <Label htmlFor="currentPassword" className="mb-1.5 text-stone-700">
                                 Senha Atual
-                            </label>
-                            <input
-                                type={showCurrentPassword ? "text" : "password"}
-                                id="currentPassword"
-                                className={`block w-full border rounded-md p-2 pr-10 transition-all
-                                    ${currentPasswordError ? "border-red-500 ring-2 ring-red-400" : "border-gray-300"}
-                                `}
-                                required
-                                value={currentPassword}
-                                onChange={e => setCurrentPassword(e.target.value)}
-                                onBlur={e => setCurrentPasswordError(validateCurrentPassword(e.target.value))}
-                            />
-                            <span
-                                className="absolute right-3 top-9 cursor-pointer select-none text-gray-500 hover:text-gray-700 transition-colors"
-                                onClick={() => setShowCurrentPassword(v => !v)}
-                                title={showCurrentPassword ? "Ocultar senha" : "Mostrar senha"}
-                            >
-                                <img
-                                    src={showCurrentPassword ? hideIcon : showIcon}
-                                    alt={showCurrentPassword ? "Ocultar senha" : "Mostrar senha"}
-                                    width={20}
-                                    height={20}
+                            </Label>
+                            <div className="relative">
+                                <Input
+                                    type={showCurrentPassword ? "text" : "password"}
+                                    id="currentPassword"
+                                    className={`pr-10 ${
+                                        currentPasswordError ? "border-red-400 ring-2 ring-red-100" : ""
+                                    }`}
+                                    aria-invalid={currentPasswordError ? true : undefined}
+                                    required
+                                    value={currentPassword}
+                                    onChange={e => setCurrentPassword(e.target.value)}
+                                    onBlur={e => setCurrentPasswordError(validateCurrentPassword(e.target.value))}
                                 />
-                            </span>
+                                <button
+                                    type="button"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 transition-colors"
+                                    onClick={() => setShowCurrentPassword(v => !v)}
+                                    title={showCurrentPassword ? "Ocultar senha" : "Mostrar senha"}
+                                    tabIndex={-1}
+                                >
+                                    {showCurrentPassword ? (
+                                        <EyeOff className="w-4 h-4" />
+                                    ) : (
+                                        <Eye className="w-4 h-4" />
+                                    )}
+                                </button>
+                            </div>
                             {currentPasswordError && (
-                                <span className="text-red-600 text-sm mt-1 block animate-pulse">{currentPasswordError}</span>
+                                <p className="text-sm text-red-600 mt-1.5">{currentPasswordError}</p>
                             )}
                         </div>
 
                         {/* Nova Senha */}
-                        <div className="relative">
-                            <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                        <div>
+                            <Label htmlFor="newPassword" className="mb-1.5 text-stone-700">
                                 Nova Senha
-                            </label>
-                            <input
-                                type={showNewPassword ? "text" : "password"}
-                                id="newPassword"
-                                className={`block w-full border rounded-md p-2 pr-10 transition-all
-                                    ${newPasswordError ? "border-red-500 ring-2 ring-red-400" : "border-gray-300"}
-                                `}
-                                required
-                                value={newPassword}
-                                onChange={e => setNewPassword(e.target.value)}
-                                onBlur={e => setNewPasswordError(validateNewPassword(e.target.value))}
-                            />
-                            <span
-                                className="absolute right-3 top-9 cursor-pointer select-none text-gray-500 hover:text-gray-700 transition-colors"
-                                onClick={() => setShowNewPassword(v => !v)}
-                                title={showNewPassword ? "Ocultar senha" : "Mostrar senha"}
-                            >
-                                <img
-                                    src={showNewPassword ? hideIcon : showIcon}
-                                    alt={showNewPassword ? "Ocultar senha" : "Mostrar senha"}
-                                    width={20}
-                                    height={20}
+                            </Label>
+                            <div className="relative">
+                                <Input
+                                    type={showNewPassword ? "text" : "password"}
+                                    id="newPassword"
+                                    className={`pr-10 ${
+                                        newPasswordError ? "border-red-400 ring-2 ring-red-100" : ""
+                                    }`}
+                                    aria-invalid={newPasswordError ? true : undefined}
+                                    required
+                                    value={newPassword}
+                                    onChange={e => setNewPassword(e.target.value)}
+                                    onBlur={e => setNewPasswordError(validateNewPassword(e.target.value))}
                                 />
-                            </span>
+                                <button
+                                    type="button"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 transition-colors"
+                                    onClick={() => setShowNewPassword(v => !v)}
+                                    title={showNewPassword ? "Ocultar senha" : "Mostrar senha"}
+                                    tabIndex={-1}
+                                >
+                                    {showNewPassword ? (
+                                        <EyeOff className="w-4 h-4" />
+                                    ) : (
+                                        <Eye className="w-4 h-4" />
+                                    )}
+                                </button>
+                            </div>
                             {newPasswordError && (
-                                <span className="text-red-600 text-sm mt-1 block animate-pulse">{newPasswordError}</span>
+                                <p className="text-sm text-red-600 mt-1.5">{newPasswordError}</p>
                             )}
                         </div>
 
                         {/* Confirmar Nova Senha */}
-                        <div className="relative">
-                            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                        <div>
+                            <Label htmlFor="confirmPassword" className="mb-1.5 text-stone-700">
                                 Confirmar Nova Senha
-                            </label>
-                            <input
-                                type={showConfirmPassword ? "text" : "password"}
-                                id="confirmPassword"
-                                className={`block w-full border rounded-md p-2 pr-10 transition-all
-                                    ${confirmPasswordError ? "border-red-500 ring-2 ring-red-400" : "border-gray-300"}
-                                `}
-                                required
-                                value={confirmPassword}
-                                onChange={e => setConfirmPassword(e.target.value)}
-                                onBlur={e => setConfirmPasswordError(validateConfirmPassword(e.target.value, newPassword))}
-                            />
-                            <span
-                                className="absolute right-3 top-9 cursor-pointer select-none text-gray-500 hover:text-gray-700 transition-colors"
-                                onClick={() => setShowConfirmPassword(v => !v)}
-                                title={showConfirmPassword ? "Ocultar senha" : "Mostrar senha"}
-                            >
-                                <img
-                                    src={showConfirmPassword ? hideIcon : showIcon}
-                                    alt={showConfirmPassword ? "Ocultar senha" : "Mostrar senha"}
-                                    width={20}
-                                    height={20}
+                            </Label>
+                            <div className="relative">
+                                <Input
+                                    type={showConfirmPassword ? "text" : "password"}
+                                    id="confirmPassword"
+                                    className={`pr-10 ${
+                                        confirmPasswordError ? "border-red-400 ring-2 ring-red-100" : ""
+                                    }`}
+                                    aria-invalid={confirmPasswordError ? true : undefined}
+                                    required
+                                    value={confirmPassword}
+                                    onChange={e => setConfirmPassword(e.target.value)}
+                                    onBlur={e => setConfirmPasswordError(validateConfirmPassword(e.target.value, newPassword))}
                                 />
-                            </span>
+                                <button
+                                    type="button"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 transition-colors"
+                                    onClick={() => setShowConfirmPassword(v => !v)}
+                                    title={showConfirmPassword ? "Ocultar senha" : "Mostrar senha"}
+                                    tabIndex={-1}
+                                >
+                                    {showConfirmPassword ? (
+                                        <EyeOff className="w-4 h-4" />
+                                    ) : (
+                                        <Eye className="w-4 h-4" />
+                                    )}
+                                </button>
+                            </div>
                             {confirmPasswordError && (
-                                <span className="text-red-600 text-sm mt-1 block animate-pulse">{confirmPasswordError}</span>
+                                <p className="text-sm text-red-600 mt-1.5">{confirmPasswordError}</p>
                             )}
                         </div>
 
-                        <button 
-                            type="submit" 
-                            className="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 rounded-lg text-white font-semibold p-3 transition duration-300"
+                        <Button
+                            type="submit"
+                            disabled={submitting}
+                            className="w-full"
+                            size="lg"
                         >
-                            Alterar Senha
-                        </button>
+                            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                            {submitting ? "Alterando..." : "Alterar Senha"}
+                        </Button>
                     </form>
                 </div>
             </div>
-        </>
-    )
+        </div>
+    );
 }

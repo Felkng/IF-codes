@@ -40,10 +40,21 @@ class Atividade extends Model
         'data_entrega',
         'problema_id',
         'turma_id',
+        'tempo_limite',
+        'memoria_limite',
+        'compiler_options',
+        'command_line_arguments',
+        'redirect_stderr_to_stdout',
+        'wall_time_limit',
+        'stack_limit',
+        'max_file_size',
+        'max_processes_and_or_threads',
     ];
 
     protected $casts = [
         'data_entrega' => 'datetime',
+        'redirect_stderr_to_stdout' => 'boolean',
+        'wall_time_limit' => 'float',
     ];
 
     public function problema()
@@ -54,5 +65,22 @@ class Atividade extends Model
     public function turma()
     {
         return $this->belongsTo(Turma::class, 'turma_id');
+    }
+
+    public function getJudge0Params(): array
+    {
+        $problema = $this->problema;
+
+        return array_filter([
+            'cpu_time_limit'  => min(($this->tempo_limite ?? $problema->tempo_limite) / 1000, 10),
+            'memory_limit'    => min($this->memoria_limite ?? $problema->memoria_limite, 256000),
+            'compiler_options'             => $this->compiler_options,
+            'command_line_arguments'        => $this->command_line_arguments,
+            'redirect_stderr_to_stdout'    => $this->redirect_stderr_to_stdout,
+            'wall_time_limit'              => min($this->wall_time_limit ?? 10, 20),
+            'stack_limit'                  => min($this->stack_limit ?? 64000, 128000),
+            'max_file_size'                => min($this->max_file_size ?? 1024, 2048),
+            'max_processes_and_or_threads' => min($this->max_processes_and_or_threads ?? 30, 60),
+        ], fn ($value) => $value !== null);
     }
 }

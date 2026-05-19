@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { fakeSubmissionReports } from "../mocks";
-import type { SubmissionReport, TestCaseResult, Submission, SubmissionStatus } from "../types";
+import type { SubmissionReport, TestCaseResult, Submission, SubmissionStatus, Language } from "../types";
 
 /**
  * Simula uma chamada de API para buscar o relatório de submissão pelo submissionId.
@@ -31,6 +31,23 @@ import Cookies from "js-cookie";
 const API_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8000";
 
 /**
+ * Mapeia language_id do Judge0 para slug usado no frontend
+ */
+const JUDGE0_LANG_MAP: Record<number, Language> = {
+  50: "c",
+  54: "cpp",
+  62: "java",
+  71: "python",
+};
+
+function mapLanguage(linguagem: number | string): Language {
+  if (typeof linguagem === "number") {
+    return JUDGE0_LANG_MAP[linguagem] ?? "c";
+  }
+  return (linguagem as Language) || "c";
+}
+
+/**
  * Simula uma chamada de API para buscar todas as submissões.
  * @returns Promise<Submission[]>
  */
@@ -52,7 +69,7 @@ export async function getAllSubmissions(): Promise<Submission[]> {
         id: submissao.id,
         activityId: submissao.atividade_id,
         dateSubmitted: submissao.data_submissao,
-        language: submissao.linguagem || "c",
+        language: mapLanguage(submissao.linguagem),
         status: mappedStatus,
         problemTitle: submissao.problema_titulo || null,
       };
@@ -111,6 +128,8 @@ export async function getResultBySubmissionId(
       submissionId: item.submissao_id,
       stdout: item.stdout || null,
       stderr: item.stderr || null,
+      compileOutput: item.compile_output || null,
+      message: item.message || null,
     }));
   } catch (error) {
     console.log("erro ao buscar resultados", error);
@@ -177,7 +196,7 @@ export async function getSubmissionsByActivityId(
       id: submissao.id,
       activityId: submissao.atividade_id,
       dateSubmitted: submissao.data_submissao,
-      language: submissao.linguagem || "c",
+      language: mapLanguage(submissao.linguagem),
       status: submissao.status ? mapBackendStatusToFrontend(submissao.status) : "pending",
     }));
 
@@ -218,7 +237,7 @@ export async function getSubmissionWithCode(
         id: data.id,
         activityId: data.atividade_id,
         dateSubmitted: data.data_submissao,
-        language: data.linguagem || "c",
+        language: mapLanguage(data.linguagem),
         status: (data.status ? mapBackendStatusToFrontend(data.status) : "pending") as SubmissionStatus,
         problemTitle: data.problema_titulo || null,
       }

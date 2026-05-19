@@ -4,7 +4,6 @@ import React, {
   useContext,
   useState,
   useEffect,
-  useRef,
   useCallback,
   useMemo,
 } from "react";
@@ -13,6 +12,14 @@ import { getAllActivities } from "@/services/ActivitiesService";
 import { getAllProblems } from "@/services/ProblemsServices";
 import { getAllSubmissions } from "@/services/SubmissionsService";
 import { useUser } from "./UserContext";
+
+export type RealtimeNotification = {
+  id: number;
+  message: string;
+  type: "success" | "warning" | "error";
+  createdAt: number;
+  duration: number;
+};
 
 interface DataContextType {
   activities: Activity[];
@@ -24,6 +31,9 @@ interface DataContextType {
   loading: boolean;
   updateSubmissions: () => Promise<void>;
   updateActivities: () => Promise<void>;
+  notifications: RealtimeNotification[];
+  pushNotification: (message: string, type?: "success" | "warning" | "error") => void;
+  dismissNotification: (id: number) => void;
 }
 
 const DataContext = createContext<DataContextType>({
@@ -36,6 +46,9 @@ const DataContext = createContext<DataContextType>({
   loading: false,
   updateSubmissions: async () => {},
   updateActivities: async () => {},
+  notifications: [],
+  pushNotification: () => {},
+  dismissNotification: () => {},
 });
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
@@ -46,6 +59,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
   const [problems, setProblems] = useState<Problem[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
+  const [notifications, setNotifications] = useState<RealtimeNotification[]>([]);
+
+  const pushNotification = useCallback((message: string, type: "success" | "warning" | "error" = "success", duration = 5000) => {
+    const id = Date.now() + Math.random();
+    const createdAt = Date.now();
+    setNotifications((prev) => [...prev, { id, message, type, createdAt, duration }]);
+  }, []);
+
+  const dismissNotification = useCallback((id: number) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
   const mapProblems = useMemo(() => {
     return new Map(problems.map((problem) => [problem.id, problem]));
   }, [problems]);
@@ -112,45 +136,80 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
     fetchData();
   }, [user, userLoading]);
 
-  // Polling para atualizar submissões pendentes/processando a cada 10 segundos
-  const hasPendingSubmissions = useRef(false);
+  // WebSocket: escuta eventos do backend para atualizar dados em tempo real
   useEffect(() => {
-    hasPendingSubmissions.current = submissions.some(
-      (s) => s.status === "pending" || s.status === "processing"
-    );
-  }, [submissions]);
+    if (!user) return;
 
-  useEffect(() => {
-    const intervalId = setInterval(async () => {
-      if (hasPendingSubmissions.current) {
-        await updateSubmissions();
-      }
-    }, 10000);
+    const token = localStorage.getItem("auth_token");
+    if (!token) return;
+
+    const wsUrl = import.meta.env.VITE_WS_URL || "ws://localhost:3002";
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let disposed = false;
+
+    function connect() {
+      if (disposed) return;
+
+      ws = new WebSocket(`${wsUrl}/notifications`);
+
+      ws.onopen = () => {
+        ws?.send(JSON.stringify({ type: "AUTH_NOTIFICATIONS", token }));
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === "ERROR") {
+            // Auth failed — stop reconnecting
+            disposed = true;
+            ws?.close();
+            return;
+          }
+          if (msg.type === "NOTIFICATION") {
+            switch (msg.event) {
+              case "activity.created":
+                updateActivities();
+                pushNotification("Uma nova atividade foi publicada!");
+                break;
+              case "activity.updated":
+                updateActivities();
+                pushNotification("Uma atividade foi atualizada.", "warning");
+                break;
+              case "activity.deleted":
+                updateActivities();
+                pushNotification("Uma atividade foi removida.", "warning");
+                break;
+              case "submission.updated":
+                updateSubmissions();
+                pushNotification("Sua submissão foi avaliada!");
+                break;
+            }
+          }
+        } catch {
+          // ignore parse errors
+        }
+      };
+
+      ws.onclose = () => {
+        if (!disposed) {
+          reconnectTimer = setTimeout(connect, 5000);
+        }
+      };
+
+      ws.onerror = () => {
+        ws?.close();
+      };
+    }
+
+    connect();
 
     return () => {
-      clearInterval(intervalId);
+      disposed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      ws?.close();
     };
-  }, [updateSubmissions]);
-
-  // Polling para atualizar atividades pendentes a cada 10 segundos
-  const hasPendingActivities = useRef(false);
-  useEffect(() => {
-    hasPendingActivities.current = activities.some(
-      (a: Activity) => a.status === "pending"
-    );
-  }, [activities]);
-
-  useEffect(() => {
-    const intervalId = setInterval(async () => {
-      if (hasPendingActivities.current) {
-        await updateActivities();
-      }
-    }, 10000);
-
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [updateActivities]);
+  }, [user, updateActivities, updateSubmissions, pushNotification]);
 
   return (
     <DataContext.Provider
@@ -164,6 +223,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({
         submissions,
         updateSubmissions,
         updateActivities,
+        notifications,
+        pushNotification,
+        dismissNotification,
       }}
     >
       {children}

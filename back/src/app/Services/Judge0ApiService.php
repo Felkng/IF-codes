@@ -38,19 +38,19 @@ class Judge0ApiService
     {
         $data['submissions'] = [];
         $casosIds = [];
+        $judge0Params = $submissao->atividade->getJudge0Params();
+
         foreach ($submissao->atividade->problema->casosTeste as $caso) {
-            $data['submissions'][] = [
-                'source_code' => $submissao->codigo,
+            $data['submissions'][] = array_merge([
+                'source_code' => base64_encode($submissao->codigo),
                 'language_id' => self::LINGUAGEM_C,
-                'stdin' => $caso->entrada,
-                'expected_output' => $caso->saida,
-                'cpu_time_limit' => $submissao->atividade->problema->tempo_limite / 1000,
-                'memory_limit' => $submissao->atividade->problema->memory_limite
-            ];
+                'stdin' => base64_encode($caso->entrada ?? ''),
+                'expected_output' => base64_encode($caso->saida ?? ''),
+            ], $judge0Params);
             $casosIds[] = $caso->id;
         }
 
-        $response = $this->client->post('/submissions/batch', $data);
+        $response = $this->client->post('/submissions/batch?base64_encoded=true', $data);
         $response->throw();
 
         $resultado = [];
@@ -79,7 +79,7 @@ class Judge0ApiService
     {
         $url = '/submissions/batch?tokens='
             . implode(',', collect($submissao->correcoes)->pluck('token')->all())
-            . '&base64_encoded=true&fields=token,status_id,compile_output';
+            . '&base64_encoded=true&fields=token,status_id,compile_output,stdout';
 
         $response = $this->client->get($url);
         $response->throw();

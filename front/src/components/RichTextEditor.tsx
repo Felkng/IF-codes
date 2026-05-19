@@ -117,6 +117,7 @@ const blockRenderMap = DefaultDraftBlockRenderMap.merge(
   })
 );
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const blockStyleFn = (block: any) => {
   const type = block.getType();
   if (type === "unordered-list-item") return "list-disc pl-6 my-1";
@@ -134,7 +135,7 @@ function createEditorStateFromValue(value: string) {
     if (parsed && parsed.blocks && Array.isArray(parsed.blocks) && parsed.entityMap !== undefined) {
       return EditorState.createWithContent(convertFromRaw(parsed));
     }
-  } catch (error) {
+  } catch (_error) {
     const content = ContentState.createFromText(value);
     return EditorState.createWithContent(content);
   }
@@ -194,6 +195,7 @@ function getCurrentBlockType(editorState: EditorState) {
   return block?.getType() ?? "unstyled";
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function getPlainTextFromRichValue(value: string) {
   const state = createEditorStateFromValue(value);
   return state.getCurrentContent().getPlainText();
